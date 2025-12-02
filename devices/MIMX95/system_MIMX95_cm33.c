@@ -83,6 +83,11 @@ void SystemInit(void)
     /* Disable all SRC boot reset holds */
     SRC_GEN->SCR = 0xFFFFFFFFU;
 
+#if defined(BOARD_DISABLE_DDR_AUTO_CLK_GATING_ON_INIT) && (BOARD_DISABLE_DDR_AUTO_CLK_GATING_ON_INIT != 0)
+    /* Disable DDR Auto Clock Gating */
+    BLK_CTRL_DDRMIX->AUTO_CG_CTRL &= ~(BLK_CTRL_DDRMIX_AUTO_CG_CTRL_AUTO_CG_ENA_MASK);
+#endif
+
     /* Mask reset sources handled by SM */
     SRC_GEN->SRMASK = (1UL << RST_REASON_CM7_LOCKUP) | 
                       (1UL << RST_REASON_CM7_SWREQ) |

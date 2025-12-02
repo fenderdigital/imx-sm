@@ -1797,6 +1797,20 @@ sub generate_board
 			'BOARD_I2C_BAUDRATE', 100000);
 	}
 
+    # Disable DDR Auto Clock Gating
+	if (my $def = &get_define('DISABLE_DDR_AUTO_CLK_GATING_ON_INIT', $cfgRef))
+	{
+		print $out '/*! Config for DDR Auto Clock Gating at system init */' . "\n";
+		print $out sprintf("#define %*s %s\n", -$w,
+			'BOARD_DISABLE_DDR_AUTO_CLK_GATING_ON_INIT', $def);
+	}
+	else
+	{
+		print $out '/*! Config for DDR Auto Clock Gating at system init */' . "\n";
+		print $out sprintf("#define %*s %s\n", -$w,
+			'BOARD_DISABLE_DDR_AUTO_CLK_GATING_ON_INIT', 0);
+	}
+
     # Output footer
     print $out &footer('BOARD');
 
