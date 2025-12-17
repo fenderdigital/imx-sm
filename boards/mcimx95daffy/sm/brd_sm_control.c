@@ -71,15 +71,6 @@ int32_t BRD_SM_ControlSet(uint32_t ctrlId, uint32_t numVal,
         {
             status = DEV_SM_ControlSet(ctrlId, numVal, val);
         }
-        else if (ctrlId == BRD_SM_CTRL_PCA2131)
-        {
-            status = SM_ERR_NOT_SUPPORTED;
-        }
-        else if (ctrlId == BRD_SM_CTRL_TEST)
-        {
-            /* Test response to an reported SM error */
-            SM_Error(SM_ERR_GENERIC_ERROR);
-        }
         else
         {
             status = SM_ERR_NOT_SUPPORTED;
@@ -108,12 +99,6 @@ int32_t BRD_SM_ControlGet(uint32_t ctrlId, uint32_t *numRtn, uint32_t *rtn)
         if (ctrlId < DEV_SM_NUM_CTRL)
         {
             status = DEV_SM_ControlGet(ctrlId, numRtn, rtn);
-        }
-        else if ((ctrlId == BRD_SM_CTRL_PCA2131)
-            || (ctrlId == BRD_SM_CTRL_TEST))
-        {
-            *numRtn = 0U;
-            status = SM_ERR_NOT_SUPPORTED;
         }
         else
         {
@@ -147,10 +132,6 @@ int32_t BRD_SM_ControlExtSet(uint32_t ctrlId, uint32_t addr,
         {
             status = DEV_SM_ControlExtSet(ctrlId, addr, numVal, val);
         }
-        else if (ctrlId == BRD_SM_CTRL_PCA2131)
-        {
-            status = BRD_SM_BbmRtcWrite(addr, numVal, val);
-        }
         else
         {
             status = SM_ERR_NOT_SUPPORTED;
@@ -181,10 +162,6 @@ int32_t BRD_SM_ControlExtGet(uint32_t ctrlId, uint32_t addr,
         {
             status = DEV_SM_ControlExtGet(ctrlId, addr, numRtn, rtn);
         }
-        else if (ctrlId == BRD_SM_CTRL_PCA2131)
-        {
-            status = BRD_SM_BbmRtcRead(addr, numRtn, rtn);
-        }
         else
         {
             status = SM_ERR_NOT_SUPPORTED;
@@ -213,7 +190,7 @@ int32_t BRD_SM_ControlFlagsSet(uint32_t ctrlId, uint32_t flags)
     }
     else
     {
-        printf ("%s(): ctrlId %s invalid!\n", __func__, BRD_SM_ControlToString (ctrlId));
+        printf ("%s(): ctrlId %u '%s' invalid!\n", __func__, ctrlId, BRD_SM_ControlToString (ctrlId));
     }
 
     return status;
