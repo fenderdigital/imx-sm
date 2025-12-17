@@ -82,12 +82,15 @@ int32_t BRD_SM_BbmRtcWrite(uint32_t addr, uint32_t numVal,
             buf[idx] = (uint8_t) val[idx];
         }
 
+        (void)buf;
+
         /* Write data */
-        if (!PCA2131_RtcWrite(&pca2131Dev, (uint8_t) addr,
-            (uint8_t) numVal, buf))
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
+        // TODO: put our RTC here
+        // if (!PCA2131_RtcWrite(&pca2131Dev, (uint8_t) addr,
+        //     (uint8_t) numVal, buf))
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
     }
 
     /* Return status */
@@ -108,22 +111,25 @@ int32_t BRD_SM_BbmRtcRead(uint32_t addr, uint32_t numVal, uint32_t *val)
     }
     else
     {
-        uint8_t buf[24] = { 0 };
+        // TODO: put our RTC here
 
-        /* Read data */
-        if (PCA2131_RtcRead(&pca2131Dev, (uint8_t) addr,
-            (uint8_t) numVal, buf))
-        {
-            /* Copy buffer (convert to 32-bit) */
-            for (uint32_t idx = 0U; idx < numVal; idx++)
-            {
-                val[idx] = (uint32_t) buf[idx];
-            }
-        }
-        else
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
+        // uint8_t buf[24] = { 0 };
+
+        // /* Read data */
+
+        // if (PCA2131_RtcRead(&pca2131Dev, (uint8_t) addr,
+        //     (uint8_t) numVal, buf))
+        // {
+        //     /* Copy buffer (convert to 32-bit) */
+        //     for (uint32_t idx = 0U; idx < numVal; idx++)
+        //     {
+        //         val[idx] = (uint32_t) buf[idx];
+        //     }
+        // }
+        // else
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
     }
 
     /* Return status */
@@ -236,17 +242,21 @@ int32_t BRD_SM_BbmRtcTimeSet(uint32_t rtcId, uint64_t val, bool ticks)
         year %= 100U;
 
         /* Write RTC */
-        if (!PCA2131_RtcSet(&pca2131Dev, year, month, day, hour, min, sec,
-            hun, weekday))
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
+        (void)hun;
+        (void)sec;
+        (void)min;
+        (void)hour;
+        // if (!PCA2131_RtcSet(&pca2131Dev, year, month, day, hour, min, sec,
+        //     hun, weekday))
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
     }
 
     if (status == SM_ERR_SUCCESS)
     {
         /* Enable battery */
-        (void) PCA2131_PowerModeSet(&pca2131Dev, 0U);
+        // (void) PCA2131_PowerModeSet(&pca2131Dev, 0U);
     }
 
     /* Return status */
@@ -266,45 +276,47 @@ int32_t BRD_SM_BbmRtcTimeGet(uint32_t rtcId, uint64_t *val, bool ticks)
     }
     else
     {
-        uint32_t year, month, day, hour, min, sec, hun, weekday;
+        uint32_t year, month, day; 
+        // uint32_t hour, min, sec, hun, weekday;
 
-        /* Read RTC */
-        if (PCA2131_RtcGet(&pca2131Dev, &year, &month, &day, &hour, &min,
-            &sec, &hun, &weekday))
-        {
-            uint32_t days, secs;
+        // /* Read RTC */
+        // if (PCA2131_RtcGet(&pca2131Dev, &year, &month, &day, &hour, &min,
+        //     &sec, &hun, &weekday))
+        // {
+            uint32_t days; 
+            // uint32_t secs;
 
-            /* Covert year */
-            if (year >= 70U)
-            {
-                year = year + 1900U;
-            }
-            else
-            {
-                year = year + 2000U;
-            }
+        //     /* Covert year */
+        //     if (year >= 70U)
+        //     {
+        //         year = year + 1900U;
+        //     }
+        //     else
+        //     {
+        //         year = year + 2000U;
+        //     }
 
-            /* Convert to days */
+        //     /* Convert to days */
             date2days(year, month, day, &days);
 
-            /* Calculate seconds */
-            secs = sec + (min * 60U) + (hour * 3600U);
-            secs += (days * 86400U);
+        //     /* Calculate seconds */
+        //     secs = sec + (min * 60U) + (hour * 3600U);
+        //     secs += (days * 86400U);
 
-            /* Check time format */
-            if (ticks)
-            {
-                *val = (((uint64_t) secs) * 100U) + hun;
-            }
-            else
-            {
-                *val = ((uint64_t) secs);
-            }
-        }
-        else
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
+        //     /* Check time format */
+        //     if (ticks)
+        //     {
+        //         *val = (((uint64_t) secs) * 100U) + hun;
+        //     }
+        //     else
+        //     {
+        //         *val = ((uint64_t) secs);
+        //     }
+        // }
+        // else
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
     }
 
     /* Return status */
@@ -324,39 +336,39 @@ int32_t BRD_SM_BbmRtcStateGet(uint32_t rtcId, uint32_t *state)
     }
     else
     {
-        bool st;
+        // bool st;
 
-        /* Default state */
-        *state = 0U;
+        // /* Default state */
+        // *state = 0U;
 
-        /* Enable battery */
-        (void) PCA2131_PowerModeSet(&pca2131Dev, 0U);
+        // /* Enable battery */
+        // (void) PCA2131_PowerModeSet(&pca2131Dev, 0U);
+
+        // /* Get battery state */
+        // if (PCA2131_TimeStatusGet(&pca2131Dev, &st))
+        // {
+        //     if (st)
+        //     {
+        //         *state |= LMM_BBM_STATE_RESET;
+        //     }
+        // }
+        // else
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
 
         /* Get battery state */
-        if (PCA2131_TimeStatusGet(&pca2131Dev, &st))
-        {
-            if (st)
-            {
-                *state |= LMM_BBM_STATE_RESET;
-            }
-        }
-        else
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
-
-        /* Get battery state */
-        if (PCA2131_BattStatusGet(&pca2131Dev, &st))
-        {
-            if (st)
-            {
-                *state |= LMM_BBM_STATE_BATT_LOW;
-            }
-        }
-        else
-        {
-            status = SM_ERR_HARDWARE_ERROR;
-        }
+        // if (PCA2131_BattStatusGet(&pca2131Dev, &st))
+        // {
+        //     if (st)
+        //     {
+        //         *state |= LMM_BBM_STATE_BATT_LOW;
+        //     }
+        // }
+        // else
+        // {
+        //     status = SM_ERR_HARDWARE_ERROR;
+        // }
     }
 
     /* Return status */
@@ -402,24 +414,27 @@ int32_t BRD_SM_BbmRtcAlarmSet(uint32_t rtcId, bool enable, uint64_t val)
             year %= 100U;
 
             /* Write to RTC */
-            if (PCA2131_AlarmSet(&pca2131Dev, day, hour, min, sec,
-                weekday))
-            {
-                /* Enable interrupt */
-                if (PCA2131_IntEnable(&pca2131Dev, true))
-                {
-                    /* Enable bus expander interrupt */
-                    status = BRD_SM_BusExpMaskSet(0U, BIT8(6));
-                }
-                else
-                {
-                    status = SM_ERR_HARDWARE_ERROR;
-                }
-            }
-            else
-            {
-                status = SM_ERR_HARDWARE_ERROR;
-            }
+            (void)sec;
+            (void)min;
+            (void)hour;
+            // if (PCA2131_AlarmSet(&pca2131Dev, day, hour, min, sec,
+            //     weekday))
+            // {
+            //     /* Enable interrupt */
+            //     if (PCA2131_IntEnable(&pca2131Dev, true))
+            //     {
+            //         /* Enable bus expander interrupt */
+            //         status = BRD_SM_BusExpMaskSet(0U, BIT8(6));
+            //     }
+            //     else
+            //     {
+            //         status = SM_ERR_HARDWARE_ERROR;
+            //     }
+            // }
+            // else
+            // {
+            //     status = SM_ERR_HARDWARE_ERROR;
+            // }
 
             /* Track if enabled for PCA2131 use */
             if (status == SM_ERR_SUCCESS)
@@ -430,15 +445,15 @@ int32_t BRD_SM_BbmRtcAlarmSet(uint32_t rtcId, bool enable, uint64_t val)
         else
         {
             /* Disable interrupt */
-            if (PCA2131_IntEnable(&pca2131Dev, false))
-            {
-                /* Disable bus expander interrupt */
-                status = BRD_SM_BusExpMaskSet(BIT8(6), BIT8(6));
-            }
-            else
-            {
-                status = SM_ERR_HARDWARE_ERROR;
-            }
+            // if (PCA2131_IntEnable(&pca2131Dev, false))
+            // {
+            //     /* Disable bus expander interrupt */
+            //     status = BRD_SM_BusExpMaskSet(BIT8(6), BIT8(6));
+            // }
+            // else
+            // {
+            //     status = SM_ERR_HARDWARE_ERROR;
+            // }
         }
     }
 
@@ -455,7 +470,7 @@ void BRD_SM_BbmHandler(void)
     LMM_BbmRtcAlarmEvent(BRD_SM_RTC_PCA2131);
 
     /* Clear status flags */
-    (void) PCA2131_IntClear(&pca2131Dev);
+    // (void) PCA2131_IntClear(&pca2131Dev);
 }
 
 /*==========================================================================*/
@@ -541,4 +556,3 @@ static void date2days(uint32_t year, uint32_t month, uint32_t day,
     /* Calculate days */
     *days = (era * 146097U) + doe - 719468U;
 }
-

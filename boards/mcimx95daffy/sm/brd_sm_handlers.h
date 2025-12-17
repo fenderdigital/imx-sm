@@ -52,7 +52,6 @@
 
 #include "sm.h"
 #include "dev_sm.h"
-#include "fsl_pcal6408a.h"
 #include "fsl_pf09.h"
 #include "fsl_pf53.h"
 #include "fsl_pca2131.h"
@@ -71,9 +70,6 @@
 /* Types */
 
 /* External variables */
-
-/*! Handle to acces PCAL6408A */
-extern PCAL6408A_Type pcal6408aDev;
 
 /*! Handle to acces PF09 */
 extern PF09_Type pf09Dev;

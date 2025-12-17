@@ -61,7 +61,7 @@
 /* Defines */
 
 /*! Board name string */
-#define BRD_SM_NAME  "i.MX95 EVK"
+#define BRD_SM_NAME  "FMIC i.MX95 DAFFY"
 
 /*! Board attributes */
 #define BRD_SM_ATTR  0x0

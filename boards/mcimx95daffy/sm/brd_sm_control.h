@@ -88,6 +88,29 @@
 
 /* Functions */
 
+static inline const char* BRD_SM_ControlToString (uint32_t crtlId)
+{
+    switch (crtlId)
+    {
+        case DEV_SM_CTRL_PDM_CLK_SEL: return "DEV_SM_CTRL_PDM_CLK_SEL"; break;
+        case DEV_SM_CTRL_MQS1_SETTINGS: return "DEV_SM_CTRL_MQS1_SETTINGS"; break;
+        case DEV_SM_CTRL_SAI1_MCLK: return "DEV_SM_CTRL_SAI1_MCLK"; break;
+        case DEV_SM_CTRL_SAI3_MCLK: return "DEV_SM_CTRL_SAI3_MCLK"; break;
+        case DEV_SM_CTRL_SAI4_MCLK: return "DEV_SM_CTRL_SAI4_MCLK"; break;
+        case DEV_SM_CTRL_SAI5_MCLK: return "DEV_SM_CTRL_SAI5_MCLK"; break;
+        case DEV_SM_CTRL_ADC_TEST: return "DEV_SM_CTRL_ADC_TEST"; break;
+        case BRD_SM_CTRL_SD3_WAKE: return "BRD_SM_CTRL_SD3_WAKE"; break;
+        case BRD_SM_CTRL_PCIE1_WAKE: return "BRD_SM_CTRL_PCIE1_WAKE"; break;
+        case BRD_SM_CTRL_BT_WAKE: return "BRD_SM_CTRL_BT_WAKE"; break;
+        case BRD_SM_CTRL_PCIE2_WAKE: return "BRD_SM_CTRL_PCIE2_WAKE"; break;
+        case BRD_SM_CTRL_BUTTON: return "BRD_SM_CTRL_BUTTON"; break;
+        case BRD_SM_CTRL_TEST: return "BRD_SM_CTRL_TEST"; break;
+        case BRD_SM_CTRL_PCA2131: return "BRD_SM_CTRL_PCA2131"; break;
+        default:
+            return ("Unknown ID");
+    };
+}
+
 /*!
  * @name Board control functions
  * @{

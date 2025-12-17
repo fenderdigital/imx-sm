@@ -51,7 +51,6 @@
 
 #include "sm.h"
 #include "dev_sm.h"
-#include "fsl_pca2131.h"
 
 /* Defines */
 
