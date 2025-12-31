@@ -19,6 +19,8 @@
 #include "fsl_cache.h"
 #include "fsl_iomuxc.h"
 #include "fsl_fro.h"
+#include "fsl_clock.h"
+#include <math.h>
 
 /*******************************************************************************
  * Definitions
@@ -244,6 +246,54 @@ void BOARD_ConfigMPU(void)
 /*--------------------------------------------------------------------------*/
 /* Initialize clocking                                                      */
 /*--------------------------------------------------------------------------*/
+
+/* compute best VCO = rate * odiv that gives minimal ach_out error */
+static uint64_t FindBestVcoForRate(uint64_t desired_rate)
+{
+    uint64_t best_vco = 0ULL;
+    uint64_t best_err = UINT64_MAX;
+    for (uint32_t odiv = 2U; odiv <= 255U; ++odiv)
+    {
+        uint64_t vco = desired_rate * (uint64_t)odiv;
+        if ((vco < ES_MIN_HZ_PLLVCO) || (vco > ES_MAX_HZ_PLLVCO))
+            continue;
+
+        /* ratio = vco / FREF */
+        uint64_t mfi = vco / (uint64_t)CLOCK_PLL_FREF_HZ;
+        uint64_t rem = vco - (mfi * (uint64_t)CLOCK_PLL_FREF_HZ);
+
+        /* round MFN = round((rem / FREF) * MFD) */
+        uint64_t mfn = 0ULL;
+        if (rem != 0ULL)
+        {
+            mfn = (rem * (uint64_t)CLOCK_PLL_MFD + (CLOCK_PLL_FREF_HZ / 2U))
+                  / (uint64_t)CLOCK_PLL_FREF_HZ;
+            if (mfn >= (uint64_t)CLOCK_PLL_MFD)
+            {
+                mfi += 1ULL;
+                mfn = 0ULL;
+            }
+        }
+
+        /* achieved VCO and output */
+        uint64_t ach_vco = (uint64_t)CLOCK_PLL_FREF_HZ * mfi +
+                           (((uint64_t)CLOCK_PLL_FREF_HZ * mfn) / (uint64_t)CLOCK_PLL_MFD);
+        uint64_t ach_out = ach_vco / (uint64_t)odiv;
+
+        uint64_t err = (ach_out > desired_rate) ? (ach_out - desired_rate) : (desired_rate - ach_out);
+
+        if (err < best_err)
+        {
+            best_err = err;
+            best_vco = vco;
+            if (err == 0ULL) break; /* exact match found */
+        }
+    }
+
+    return best_vco;
+}
+
+
 void BOARD_InitClocks(void)
 {
     uint32_t fuseTrim = FSB->FUSE[FSB_FUSE_ANA_CFG4];
@@ -319,7 +369,12 @@ void BOARD_InitClocks(void)
         uint32_t odiv2 = (uint32_t)((ES_MIN_HZ_PLLVCO + desired_out2 - 1ULL) / desired_out2);
         if (odiv2 < 2U) odiv2 = 2U;
         if (odiv2 > 255U) odiv2 = 255U;
-        uint64_t vco2 = desired_out2 * (uint64_t)odiv2;
+        uint64_t vco2 = FindBestVcoForRate(desired_out2);
+        if (vco2 == 0ULL)
+        {
+            /* fallback: pick minimal odiv as before */
+            vco2 = desired_out2 * (uint64_t)odiv2;
+        }
         if (!CLOCK_SourceSetRate(CLOCK_SRC_AUDIOPLL2_VCO, vco2, CLOCK_ROUND_RULE_CLOSEST))
         {
             printf("BOARD_InitClocks: WARNING - failed to set AUDIOPLL2 VCO rate %llu\n", (unsigned long long)vco2);
