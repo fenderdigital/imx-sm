@@ -272,6 +272,75 @@ void BOARD_InitClocks(void)
     (void) CCM_RootSetParent(CLOCK_ROOT_ADC, CLOCK_SRC_SYSPLL1_PFD1_DIV2);
     (void) CCM_RootSetRate(CLOCK_ROOT_ADC, BOARD_ADC_CLK_RATE,
         CLOCK_ROUND_RULE_CEILING);
+    
+    /* 1) Power up the VCO */
+    (void) CLOCK_SourceSetEnable(CLOCK_SRC_AUDIOPLL1_VCO, true);
+
+    /* Compute a VCO rate for AUDIOPLL1 that is within PLL VCO limits
+     * by choosing the smallest integer ODIV in [2..255] such that
+     * vco = desired_out * ODIV is within [ES_MIN_HZ_PLLVCO, ES_MAX_HZ_PLLVCO].
+     */
+    {
+        const uint64_t desired_out = 196608000ULL;
+        uint32_t odiv = (uint32_t)((ES_MIN_HZ_PLLVCO + desired_out - 1ULL) / desired_out);
+        if (odiv < 2U) odiv = 2U;
+        if (odiv > 255U) odiv = 255U;
+        uint64_t vco = desired_out * (uint64_t)odiv;
+        if (!CLOCK_SourceSetRate(CLOCK_SRC_AUDIOPLL1_VCO, vco, CLOCK_ROUND_RULE_CLOSEST))
+        {
+            printf("BOARD_InitClocks: WARNING - failed to set AUDIOPLL1 VCO rate %llu\n", (unsigned long long)vco);
+        }
+    }
+
+    /* 2) Set the AUDIOPLL1 output rate (driver computes VCO/ODIV as needed) */
+    if (!CLOCK_SourceSetRate(CLOCK_SRC_AUDIOPLL1, 196608000u, CLOCK_ROUND_RULE_CLOSEST))
+    {
+        printf("BOARD_InitClocks: WARNING - failed to set AUDIOPLL1 rate\n");
+    }
+
+    /* 3) Enable the PLL output (clk mux) */
+    if (!CLOCK_SourceSetEnable(CLOCK_SRC_AUDIOPLL1, true))
+    {
+        printf("BOARD_InitClocks: WARNING - failed to enable AUDIOPLL1 output\n");
+    }
+
+    /* Readback and log applied AUDIOPLL1 rate */
+    {
+        uint64_t r = CLOCK_SourceGetRate(CLOCK_SRC_AUDIOPLL1);
+        printf("BOARD_InitClocks: AUDIOPLL1 applied rate %llu Hz\n", (unsigned long long)r);
+    }
+
+    /* Also configure AUDIOPLL2: power VCO, set rate, and enable output */
+    (void) CLOCK_SourceSetEnable(CLOCK_SRC_AUDIOPLL2_VCO, true);
+
+    /* Compute a VCO rate for AUDIOPLL2 similar to AUDIOPLL1 */
+    {
+        const uint64_t desired_out2 = 180633600ULL;
+        uint32_t odiv2 = (uint32_t)((ES_MIN_HZ_PLLVCO + desired_out2 - 1ULL) / desired_out2);
+        if (odiv2 < 2U) odiv2 = 2U;
+        if (odiv2 > 255U) odiv2 = 255U;
+        uint64_t vco2 = desired_out2 * (uint64_t)odiv2;
+        if (!CLOCK_SourceSetRate(CLOCK_SRC_AUDIOPLL2_VCO, vco2, CLOCK_ROUND_RULE_CLOSEST))
+        {
+            printf("BOARD_InitClocks: WARNING - failed to set AUDIOPLL2 VCO rate %llu\n", (unsigned long long)vco2);
+        }
+    }
+
+    if (!CLOCK_SourceSetRate(CLOCK_SRC_AUDIOPLL2, 180633600u, CLOCK_ROUND_RULE_CLOSEST))
+    {
+        printf("BOARD_InitClocks: WARNING - failed to set AUDIOPLL2 rate\n");
+    }
+
+    if (!CLOCK_SourceSetEnable(CLOCK_SRC_AUDIOPLL2, true))
+    {
+        printf("BOARD_InitClocks: WARNING - failed to enable AUDIOPLL2 output\n");
+    }
+
+    /* Readback and log applied AUDIOPLL2 rate */
+    {
+        uint64_t r2 = CLOCK_SourceGetRate(CLOCK_SRC_AUDIOPLL2);
+        printf("BOARD_InitClocks: AUDIOPLL2 applied rate %llu Hz\n", (unsigned long long)r2);
+    }
 }
 
 /*--------------------------------------------------------------------------*/

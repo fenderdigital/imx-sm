@@ -193,6 +193,7 @@ int32_t BRD_SM_Init(int argc, const char * const argv[], uint32_t *mSel)
     }
 
     /* Return status */
+    printf ("%s(): return %d\n", __func__, status);
     return status;
 }
 

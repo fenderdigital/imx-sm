@@ -2,4 +2,4 @@
 *.d
 build
 **/compile_commands.json
-.vscode
+.vscode*
