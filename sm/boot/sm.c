@@ -94,8 +94,8 @@ int main(int argc, const char * const argv[])
     delta = DEV_SM_Usec64Get();
 
     /* Print banner */
-    printf("\nHello faff from SM (Build %lu, Commit %08lx, %s %s)\n\n",
-        SM_BUILD, SM_COMMIT, SM_DATE, SM_TIME);
+    printf("\nHello from SM (Board '%s' Build %lu, Commit %08lx, %s %s)\n\n",
+        BRD_SM_NAME, SM_BUILD, SM_COMMIT, SM_DATE, SM_TIME);
 
 #if MONITOR_MODE == 2
     printf("Press key to enter monitor mode.\n\n",

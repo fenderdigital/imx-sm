@@ -32,7 +32,6 @@
 #include "fsl_clock.h"
 #include "fsl_fract_pll.h"
 #include "fsl_device_registers.h"
-#include <stdio.h>
 
 /* Local Defines */
 #define FRACPLL_CTRL_CONTEXT_MASK   PLL_CTRL_SPREADCTL_MASK
@@ -355,21 +354,7 @@ bool FRACTPLL_SetRate(uint32_t pllIdx, bool vcoOp, uint64_t rate)
                     / ((uint64_t) CLOCK_PLL_CALC_ACCURACY_HZ));
             }
 
-            /* compute expected achieved VCO and output for logging */
-            uint64_t ach_vco = ((uint64_t)CLOCK_PLL_FREF_HZ * (uint64_t)mfi) +
-                               (((uint64_t)CLOCK_PLL_FREF_HZ * (uint64_t)mfn) / (uint64_t)CLOCK_PLL_MFD);
-            uint64_t ach_out = (odiv != 0U) ? (ach_vco / (uint64_t)odiv) : 0ULL;
-
             updateRate = FRACTPLL_UpdateRate(pllIdx, mfi, mfn, odiv);
-
-            printf("FRACTPLL_SetRate: desired %llu Hz, odiv=%u, MFI=%u, MFN=%u, MFD=%u -> achieved %llu Hz (err %lld Hz)\n",
-                (unsigned long long)rate,
-                (unsigned)odiv,
-                (unsigned)mfi,
-                (unsigned)mfn,
-                (unsigned)CLOCK_PLL_MFD,
-                (unsigned long long)ach_out,
-                (long long)((long long)ach_out - (long long)rate));
         }
     }
 

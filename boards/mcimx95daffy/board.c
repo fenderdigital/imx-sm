@@ -326,12 +326,6 @@ static void SetupAudioPll(uint32_t pllRoot, uint32_t pllVcoRoot, uint64_t desire
     {
         printf("BOARD_InitClocks: WARNING - failed to enable %s output\n", name);
     }
-
-    /* Readback and log applied rate */
-    {
-        uint64_t r = CLOCK_SourceGetRate(pllRoot);
-        printf("BOARD_InitClocks: %s applied rate %llu Hz\n", name, (unsigned long long)r);
-    }
 }
 
 

@@ -36,8 +36,6 @@
 #include "fsl_power.h"
 #include "fsl_src.h"
 #include "fsl_device_registers.h"
-#include <inttypes.h>
-#include <stdio.h>
 
 /* Local Defines */
 
@@ -1083,8 +1081,6 @@ bool CLOCK_SourceSetEnable(uint32_t sourceIdx, bool enable)
 {
     bool updateEnable = false;
 
-
-
     if (CLOCK_SourcePdIsOn(sourceIdx))
     {
         switch(sourceIdx)
@@ -1148,19 +1144,13 @@ bool CLOCK_SourceSetEnable(uint32_t sourceIdx, bool enable)
                 break;
 
             case CLOCK_SRC_AUDIOPLL1_VCO:
-            {
-                printf ("%s\n", enable ? "vEn" : "vDis");
                 updateEnable = FRACTPLL_SetEnable(CLOCK_PLL_AUDIO1,
                     PLL_CTRL_POWERUP_MASK, enable);
-            }
                 break;
 
             case CLOCK_SRC_AUDIOPLL1:
-            {
-                printf ("%s\n", enable ? "En" : "Dis");
                 updateEnable = FRACTPLL_SetEnable(CLOCK_PLL_AUDIO1,
                     PLL_CTRL_CLKMUX_EN_MASK, enable);
-            }
                 break;
 
             case CLOCK_SRC_AUDIOPLL2_VCO:
@@ -1435,13 +1425,6 @@ bool CLOCK_SourceSetRate(uint32_t sourceIdx, uint64_t rate,
     uint32_t roundRule)
 {
     bool updateRate = false;
-
-    if (sourceIdx == CLOCK_SRC_AUDIOPLL1 || sourceIdx == CLOCK_SRC_AUDIOPLL2)
-    {
-        const char* clockStr = sourceIdx == CLOCK_SRC_AUDIOPLL1 ? "CLOCK_SRC_AUDIOPLL1" : "CLOCK_SRC_AUDIOPLL2";
-        printf ("%s(): clock '%s', rate %u, roundRule %u\n", 
-            __func__, clockStr, (unsigned)rate, roundRule);
-    }
 
     if (CLOCK_SourcePdIsOn(sourceIdx))
     {
