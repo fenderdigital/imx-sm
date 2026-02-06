@@ -99,6 +99,18 @@
 #define DEV_SM_ROM_BS_SERIAL     0x5U
 /** @} */
 
+static inline const char* rom_BootStageToString (uint32_t bootStage)
+{
+    switch (bootStage)
+    {
+        case DEV_SM_ROM_BS_PRIMARY: return "Primary"; break;
+        case DEV_SM_ROM_BS_SECONDARY: return "Secondary"; break;
+        case DEV_SM_ROM_BS_RECOVERY: return "Recovery"; break;
+        case DEV_SM_ROM_BS_SERIAL: return "Serial"; break;
+        default: return "unknown Boot Stage";
+    }
+}
+
 /*!
  * @name Device ROM boot device
  */
@@ -111,6 +123,34 @@
 #define DEV_SM_ROM_BD_FLEXSPINAND  0x8U
 #define DEV_SM_ROM_BD_USB          0xEU
 /** @} */
+
+static inline const char* rom_BootDeviceTypeToString (uint32_t bootDevType)
+{
+    switch (bootDevType)
+    {
+        case DEV_SM_ROM_BD_PRELOAD: return "Preload"; break;
+        case DEV_SM_ROM_BD_SD: return "SD"; break;
+        case DEV_SM_ROM_BD_MMC: return "MMC"; break;
+        case DEV_SM_ROM_BD_FLEXSPINOR: return "FlexSPI-NOR"; break;
+        case DEV_SM_ROM_BD_LPSPIEEPROM: return "LPSPI-EEPROM"; break;
+        case DEV_SM_ROM_BD_FLEXSPINAND: return "FlexSPI-NAND"; break;
+        case DEV_SM_ROM_BD_USB: return "USB"; break;
+        default: return "unknown DeviceType";
+    }
+}
+
+static inline const char* rom_BootPinsToString (uint32_t bootPins)
+{
+    switch (bootPins & 0x7)
+    {
+        case 0x1: return "Serial Downloader USB1"; break;
+        case 0x2: return "USDHC1 8-bit eMMC"; break;
+        case 0x3: return "USDHC2 4-bit SD"; break;
+        case 0x4: return "FlexSPI Serial NOR"; break;
+        case 0x5: return "FlexSPI Serial NAND"; break; 
+        default: return "Unkown BootMode";
+    }
+}
 
 /*! @endcond */
 

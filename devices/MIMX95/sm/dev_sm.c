@@ -42,6 +42,7 @@
 #include "dev_sm.h"
 #include "fsl_device_registers.h"
 #include "fsl_ele.h"
+#include "MIMX95_SRC_GEN.h"
 
 /* Local defines */
 
@@ -166,6 +167,13 @@ int32_t DEV_SM_Init(uint32_t bootPerfLevel, uint32_t runPerfLevel)
         status = DEV_SM_BbmInit();
     }
 
+    printf("\n");
+    printf("Boot Stage: %s\n", rom_BootStageToString (romPassover->bootStage));
+    printf("Boot Device Type: %s\n", rom_BootDeviceTypeToString (romPassover->bootDevType));
+    uint32_t sbmr2 = SRC_GEN->SBMR2;
+    uint32_t ippBootMode = (sbmr2 & SRC_GEN_SBMR2_IPP_BOOT_MODE_MASK) >> SRC_GEN_SBMR2_IPP_BOOT_MODE_SHIFT;
+    printf("Boot_Mode[3:0]: 0x%02X - %s\n", ippBootMode, rom_BootPinsToString (ippBootMode));
+    
     /* Return status */
     return status;
 }
