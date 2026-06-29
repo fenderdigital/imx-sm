@@ -88,6 +88,10 @@ void SystemInit(void)
     BLK_CTRL_DDRMIX->AUTO_CG_CTRL &= ~(BLK_CTRL_DDRMIX_AUTO_CG_CTRL_AUTO_CG_ENA_MASK);
 #endif
 
+    /* Enable DWT Cycle Counter for instrumentation timing */
+    *((volatile uint32_t *)0xE000EDFCU) |= (1U << 24);  /* DEMCR.TRCENA */
+    *((volatile uint32_t *)0xE0001004U) = 0U;            /* DWT->CYCCNT = 0 */
+    *((volatile uint32_t *)0xE0001000U) |= 1U;           /* DWT->CTRL.CYCCNTENA */
     /* Mask reset sources handled by SM */
     SRC_GEN->SRMASK = (1UL << RST_REASON_CM7_LOCKUP) | 
                       (1UL << RST_REASON_CM7_SWREQ) |
