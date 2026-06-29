@@ -40,6 +40,7 @@
 
 #include "dev_sm.h"
 #include "dev_sm_handlers.h"
+#include "dev_sm_diagnostics.h"
 #include "brd_sm.h"
 #include "mb_mu.h"
 #include "config_mb_mu.h"
@@ -76,160 +77,13 @@
 
 /* Local variables */
 
+/* Diagnostics needs external linkage to read msec timestamps; otherwise
+ * keep this strictly file-local. */
+#ifdef DEV_SM_DIAGNOSTICS
+uint64_t s_smTimeMsec = 0ULL;
+#else
 static uint64_t s_smTimeMsec = 0ULL;
-
-/*==========================================================================*/
-/* SM Event Ring - lightweight timestamped event capture for stall debug    */
-/*==========================================================================*/
-
-/* Shared-memory diagnostics - BSS-allocated struct for safety.
- * Placed in BSS alongside other instrumentation; linker handles layout.
- * Layout: [0]=magic 0x534D4731, [1]=version, [2]=ms,
- *         [3]=gap_max_cyc, [4]=gap_count, [5]=gpc_req_cnt,
- *         [6]=gpc_max_cyc, [7]=event_ring_head,
- *         [8..10]=ele_irq[0..2], [11]=last_update_ms */
-/* External linkage: rpc_scmi_misc.c (SCMI 0x30/0x31) references this. */
-volatile uint32_t  s_smShmBlock[12]
-    __attribute__((section(".bss"), used)) = {0U, 0U, 0U, 0U,
-                                               0U, 0U, 0U, 0U,
-                                               0U, 0U, 0U, 0U};
-#define SM_SHM_BASE (&s_smShmBlock[0])
-
-#define SM_EVENT_RING_SIZE      128U
-#define SM_EVENT_RING_MASK      (SM_EVENT_RING_SIZE - 1U)
-
-#define SM_EVT_GPC_REQ_ENTRY        0x01U
-#define SM_EVT_GPC_REQ_EXIT         0x02U
-#define SM_EVT_ELE_GROUP1           0x10U
-#define SM_EVT_ELE_GROUP2           0x11U
-#define SM_EVT_ELE_GROUP3           0x12U
-#define SM_EVT_FCCU_ALARM           0x20U
-#define SM_EVT_SM_GAP_EXCEEDED      0x31U
-#define SM_EVT_CLOCK_RATE_SET       0x40U
-#define SM_EVT_POWER_STATE_SET      0x41U
-#define SM_EVT_SYSTICK_1K           0x30U
-
-typedef struct {
-    uint32_t ms;
-    uint32_t cyccnt;
-    uint8_t  evt;
-    uint8_t  mix_idx;
-    uint8_t  stat;
-    uint8_t  pad;
-} sm_evt_t;
-
-/* External linkage: rpc_scmi_misc.c (SCMI 0x32 RING_READ) references this. */
-volatile sm_evt_t  s_smEventRing[SM_EVENT_RING_SIZE]
-    __attribute__((section(".bss"), used));
-/* External linkage: rpc_scmi_misc.c (SCMI 0x31/0x32) references this. */
-volatile uint32_t  s_smEventRingHead
-    __attribute__((section(".bss"), used)) = 0U;
-
-static volatile uint32_t  s_smGpcReqCount
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smGpcMaxCyc
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smEleIrqCount[3]
-    __attribute__((section(".bss"), used)) = {0U, 0U, 0U};
-static volatile uint32_t  s_smFccuCount
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smLastGpcMix
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smLastGpcMs
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smLastGpcCyc
-    __attribute__((section(".bss"), used)) = 0U;
-
-/* JTAG-readable SM gap tracking */
-static volatile uint32_t  s_smSystickGapMaxCyc
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smSystickGapCount
-    __attribute__((section(".bss"), used)) = 0U;
-/* External linkage: rpc_scmi_misc.c (SCMI 0x31 RING_HEAD) references this. */
-volatile uint32_t  s_smEvtCounts[8]
-    __attribute__((section(".bss"), used)) = {0U, 0U, 0U, 0U,
-                                               0U, 0U, 0U, 0U};
-static volatile uint32_t  s_smLastSystickCyc
-    __attribute__((section(".bss"), used)) = 0U;
-static volatile uint32_t  s_smShmUpdateCount
-    __attribute__((section(".bss"), used)) = 0U;
-
-/* Publish key SM diagnostics to shared memory for A55 /dev/mem read */
-static inline void sm_update_shm(void)
-{
-    SM_SHM_BASE[0] = 0x534D4731U;  /* magic "SMG1" */
-    SM_SHM_BASE[1] = 1U;           /* version */
-    SM_SHM_BASE[2] = (uint32_t)s_smTimeMsec;
-    SM_SHM_BASE[3] = s_smSystickGapMaxCyc;
-    SM_SHM_BASE[4] = s_smSystickGapCount;
-    SM_SHM_BASE[5] = s_smGpcReqCount;
-    SM_SHM_BASE[6] = s_smGpcMaxCyc;
-    SM_SHM_BASE[7] = s_smEventRingHead;
-    SM_SHM_BASE[8] = s_smEleIrqCount[0];
-    SM_SHM_BASE[9] = s_smEleIrqCount[1];
-    SM_SHM_BASE[10] = s_smEleIrqCount[2];
-    SM_SHM_BASE[11] = s_smShmUpdateCount++;
-}
-
-static inline uint32_t sm_cyccnt(void)
-{
-    return *((volatile const uint32_t *)0xE0001004U);
-}
-
-/* Seqlock generation counter for s_smEventRing writers.
- * Even = idle, odd = writer mid-update.  Consumed by SCMI MISC 0x32
- * (MiscDiagRingRead) to detect torn reads across writer pre-emption.
- * Placed here (between sm_cyccnt and sm_evt_log) so it does NOT
- * disturb the python injection anchor that bridges s_smLastGpcCyc and
- * sm_cyccnt, and does NOT shift addresses of any 0004-introduced ring
- * or counter symbol. */
-/* External linkage: rpc_scmi_misc.c references this. */
-volatile uint32_t  s_smRingWriterSeq
-    __attribute__((section(".bss"), used)) = 0U;
-
-static inline void sm_evt_log(uint8_t evt, uint8_t mix, uint8_t stat)
-{
-    /* Mask interrupts so a nested writer cannot tear the record body.
-     * ~30ns @200MHz; FCCU IRQ already higher priority and unaffected.
-     * primask save/restore preserves nesting semantics. */
-    uint32_t primask;
-    __asm volatile ("mrs %0, primask\n\tcpsid i"
-                    : "=r"(primask) :: "memory");
-
-    /* Enter seqlock: bump generation to odd, publish before body */
-    uint32_t seq = s_smRingWriterSeq + 1U;
-    s_smRingWriterSeq = seq;
-    __asm volatile ("dmb ish" ::: "memory");
-
-    uint32_t idx = s_smEventRingHead & SM_EVENT_RING_MASK;
-    volatile sm_evt_t *e = &s_smEventRing[idx];
-    e->ms = (uint32_t)s_smTimeMsec;
-    e->cyccnt = sm_cyccnt();
-    e->evt = evt;
-    e->mix_idx = mix;
-    e->stat = stat;
-    e->pad = 0U;
-
-    /* Publish body before head advance; head advance before seqlock exit */
-    __asm volatile ("dmb ish" ::: "memory");
-    s_smEventRingHead++;
-    __asm volatile ("dmb ish" ::: "memory");
-
-    /* Exit seqlock: bump generation back to even */
-    s_smRingWriterSeq = seq + 1U;
-    __asm volatile ("dmb ish" ::: "memory");
-
-    /* Per-event-class fast counter consumed by SCMI MISC 0x31 reply.
-     * s_smEvtCounts[] is BSS-allocated by the apply-sm-gap-monitor.py
-     * injection that runs in do_configure:prepend AFTER do_patch; this
-     * reference is resolved at compile time (do_compile follows
-     * do_configure). */
-    s_smEvtCounts[(evt >> 4) & 0x7U]++;
-
-    /* Restore PRIMASK (re-enables interrupts if they were enabled) */
-    __asm volatile ("msr primask, %0" :: "r"(primask) : "memory");
-}
-
+#endif
 
 static irq_prio_info_t s_irqPrioInfo[DEV_SM_NUM_IRQ_PRIO_IDX] =
 {
@@ -400,10 +254,11 @@ static void ExceptionHandler(IRQn_Type excId, const uint32_t *sp,
     uint32_t faultStatus, uint32_t faultAddr);
 static void FaultHandler(uint32_t faultId);
 static irq_prio_info_t *IrqPrioMap(IRQn_Type irq);
+#ifdef DEV_SM_DIAGNOSTICS
 static void IrqPrioBoost(irq_prio_info_t const * pInfo,uint32_t relPrio);
 static void IrqPrioUpdateRelative(irq_prio_info_t const *pInfo,
     uint32_t relPrio);
-static void IrqPrioUpdate(irq_prio_info_t *pInfo);
+#endif
 
 /*--------------------------------------------------------------------------*/
 /* NMI exception handler                                                    */
@@ -494,6 +349,7 @@ void SysTick_Handler(void)
 
     s_smTimeMsec += BOARD_TICK_PERIOD_MSEC;
 
+#ifdef DEV_SM_DIAGNOSTICS
     /* SM execution gap check: DWT CYCCNT delta since last SysTick.
      * Empirically CYCCNT runs at ~400MHz (M33 core clock), tick=10ms
      * => baseline ~4,000,000 cycles per tick.
@@ -522,6 +378,7 @@ void SysTick_Handler(void)
     {
         sm_evt_log(SM_EVT_SYSTICK_1K, 0U, 0U);
     }
+#endif
 }
 
 /*--------------------------------------------------------------------------*/
@@ -627,8 +484,10 @@ void Reserved110_IRQHandler(void)
 /*--------------------------------------------------------------------------*/
 void ELE_Group1_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
     s_smEleIrqCount[0]++;
     sm_evt_log(SM_EVT_ELE_GROUP1, 0U, 0U);
+#endif
 
     /* Call common handler */
     ExceptionHandler(ELE_Group1_IRQn, sp,
@@ -641,8 +500,10 @@ void ELE_Group1_IRQHandler(const uint32_t *sp)
 /*--------------------------------------------------------------------------*/
 void ELE_Group2_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
     s_smEleIrqCount[1]++;
     sm_evt_log(SM_EVT_ELE_GROUP2, 0U, 0U);
+#endif
 
     /* Call common handler */
     ExceptionHandler(ELE_Group2_IRQn, sp,
@@ -655,8 +516,10 @@ void ELE_Group2_IRQHandler(const uint32_t *sp)
 /*--------------------------------------------------------------------------*/
 void ELE_Group3_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
     s_smEleIrqCount[2]++;
     sm_evt_log(SM_EVT_ELE_GROUP3, 0U, 0U);
+#endif
 
     /* Call common handler */
     ExceptionHandler(ELE_Group3_IRQn, sp,
@@ -813,8 +676,10 @@ void MU6_B_IRQHandler(void)
 /*--------------------------------------------------------------------------*/
 void FCCU_INT0_IRQHandler(void)
 {
+#ifdef DEV_SM_DIAGNOSTICS
     s_smFccuCount++;
     sm_evt_log(SM_EVT_FCCU_ALARM, 0U, 0U);
+#endif
 
     VFCCU_ALARM_ISR();
 }
@@ -825,7 +690,9 @@ void FCCU_INT0_IRQHandler(void)
 void GPC_SM_REQ_IRQHandler(void)
 {
     pwr_lp_hs_mode lpHsMode;
+#ifdef DEV_SM_DIAGNOSTICS
     uint32_t cyc0 = sm_cyccnt();
+#endif
 
     PWR_LpHandshakeModeGet(&lpHsMode);
 
@@ -848,6 +715,7 @@ void GPC_SM_REQ_IRQHandler(void)
         PWR_LpHandshakeAck();
     }
 
+#ifdef DEV_SM_DIAGNOSTICS
     /* Log exit and update counters */
     {
         uint32_t cyc1 = sm_cyccnt();
@@ -866,6 +734,7 @@ void GPC_SM_REQ_IRQHandler(void)
         s_smLastGpcMs = (uint32_t)s_smTimeMsec;
         s_smLastGpcCyc = dur;
     }
+#endif
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1116,6 +985,7 @@ static irq_prio_info_t *IrqPrioMap(IRQn_Type irq)
     return pInfo;
 }
 
+#ifdef DEV_SM_DIAGNOSTICS
 /*--------------------------------------------------------------------------*/
 /* Boost dynamic priority of IRQ                                            */
 /*--------------------------------------------------------------------------*/
@@ -1192,7 +1062,7 @@ static void IrqPrioUpdateRelative(irq_prio_info_t const *pInfo,
 /*--------------------------------------------------------------------------*/
 /* Update dynamic priority of IRQ using priority info table index           */
 /*--------------------------------------------------------------------------*/
-static void IrqPrioUpdate(irq_prio_info_t *pInfo)
+void IrqPrioUpdate_Impl(irq_prio_info_t *pInfo)
 {
     if (pInfo != NULL)
     {
@@ -1227,4 +1097,5 @@ static void IrqPrioUpdate(irq_prio_info_t *pInfo)
         }
     }
 }
+#endif /* DEV_SM_DIAGNOSTICS */
 

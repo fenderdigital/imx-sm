@@ -42,8 +42,9 @@
 #include "rpc_scmi_internal.h"
 #include "lmm.h"
 
+#ifdef DEV_SM_DIAGNOSTICS
 /* SM instrumentation symbols defined non-static in
- * devices/MIMX95/sm/dev_sm_handlers.c for the 0x30/0x31/0x32
+ * devices/MIMX95/sm/dev_sm_diagnostics.c for the 0x30/0x31/0x32
  * handlers.  Using symbols (not hardcoded BSS addresses) so the
  * linker resolves them and the handlers stay correct across SM
  * rebuilds even if BSS layout shifts. */
@@ -60,6 +61,7 @@ extern volatile uint32_t s_smEventRingHead;
 extern volatile uint32_t s_smEvtCounts[8];
 extern volatile uint32_t s_smShmBlock[12];
 extern volatile sm_evt_extern_t s_smEventRing[128];
+#endif
 
 /* Local defines */
 
@@ -88,7 +90,11 @@ extern volatile sm_evt_extern_t s_smEventRing[128];
 #define COMMAND_NEGOTIATE_PROTOCOL_VERSION   0x10U
 #define COMMAND_MISC_CONTROL_EXT_SET         0x20U
 #define COMMAND_MISC_CONTROL_EXT_GET         0x21U
+#ifdef DEV_SM_DIAGNOSTICS
 #define COMMAND_SUPPORTED_MASK               0x300017FFFULL | (1ULL << COMMAND_MISC_DIAG_DATA) | (1ULL << COMMAND_MISC_DIAG_RING_HEAD) | (1ULL << COMMAND_MISC_DIAG_RING_READ)
+#else
+#define COMMAND_SUPPORTED_MASK               0x300017FFFULL
+#endif
 
 /* SCMI max misc argument lengths */
 #define MISC_MAX_BUILDDATE  16U
@@ -571,6 +577,7 @@ static int32_t MiscControlExtGet(const scmi_caller_t *caller,
     const msg_rmisc33_t *in, msg_tmisc33_t *out, uint32_t *len);
 static int32_t MiscControlEvent(scmi_msg_id_t msgId,
     const lmm_rpc_trigger_t *trigger);
+#ifdef DEV_SM_DIAGNOSTICS
 static int32_t MiscDiagData(const scmi_caller_t *caller,
     const scmi_msg_header_t *in, msg_tmisc_diag_t *out);
 static int32_t MiscDiagRingHead(const scmi_caller_t *caller,
@@ -578,6 +585,7 @@ static int32_t MiscDiagRingHead(const scmi_caller_t *caller,
 static int32_t MiscDiagRingRead(const scmi_caller_t *caller,
     const msg_rmisc_diag_ring_read_t *in,
     msg_tmisc_diag_ring_read_t *out);
+#endif
 static int32_t MiscResetAgentConfig(uint32_t lmId, uint32_t agentId,
     bool permissionsReset);
 
@@ -679,6 +687,7 @@ int32_t RPC_SCMI_MiscDispatchCommand(scmi_caller_t *caller,
             status = MiscNegotiateProtocolVersion(caller,
                 (const msg_rmisc16_t*) in, (const scmi_msg_status_t*) out);
             break;
+#ifdef DEV_SM_DIAGNOSTICS
         case COMMAND_MISC_DIAG_DATA:
             lenOut = sizeof(msg_tmisc_diag_t);
             status = MiscDiagData(caller,
@@ -697,6 +706,7 @@ int32_t RPC_SCMI_MiscDispatchCommand(scmi_caller_t *caller,
                 (const msg_rmisc_diag_ring_read_t*) in,
                 (msg_tmisc_diag_ring_read_t*) out);
             break;
+#endif
         case COMMAND_MISC_CONTROL_EXT_SET:
             lenOut = sizeof(const scmi_msg_status_t);
             status = MiscControlExtSet(caller, (const msg_rmisc32_t*) in,
@@ -1743,6 +1753,7 @@ static int32_t MiscSyslog(const scmi_caller_t *caller,
 /*   bytes in length                                                        */
 /*                                                                          */
 /* Process the MISC_BOARD_INFO message. Platform handler for                */
+#ifdef DEV_SM_DIAGNOSTICS
 /* SCMI_MiscDiagData() - 0x30.
  * Returns SM instrumentation diagnostic block (12 x uint32_t)
  * from the shared BSS region at 0x2002A878. */
@@ -1840,6 +1851,7 @@ static int32_t MiscDiagRingRead(const scmi_caller_t *caller,
     }
     return status;
 }
+#endif /* DEV_SM_DIAGNOSTICS */
 
 /* SCMI_MiscBoardInfo().                                                    */
 /*                                                                          */

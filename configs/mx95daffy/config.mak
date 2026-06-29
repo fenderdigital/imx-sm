@@ -32,9 +32,6 @@
 
 BOARD ?= mcimx95daffy
 
-# Disable DDR RX Replica periodic calibration to avoid PHY-pause stalls
-NO_RX_REPLICA ?= 1
-
 USES_FUSA ?= 1
 
 include ./devices/MIMX95/sm/Makefile

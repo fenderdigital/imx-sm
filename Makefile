@@ -117,6 +117,13 @@ ifeq ($(USES_FUSA),1)
 	FLAGS += -DUSES_FUSA
 endif
 
+# SM diagnostics instrumentation (event ring, gap monitor, shm block,
+# SCMI MISC 0x30/0x31/0x32 providers, dynamic IRQ priority update).
+DEV_SM_DIAGNOSTICS ?= 0
+ifeq ($(DEV_SM_DIAGNOSTICS),1)
+	FLAGS += -DDEV_SM_DIAGNOSTICS
+endif
+
 INCLUDE += -I$(ROOT_DIR)/configs/$(CONFIG)
 
 # Include boot
