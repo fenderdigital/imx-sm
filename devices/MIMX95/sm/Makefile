@@ -120,6 +120,7 @@ SM_OBJS = \
 	$(OUT)/dev_sm.o  \
 	$(OUT)/dev_sm_common.o  \
 	$(OUT)/dev_sm_handlers.o  \
+	$(OUT)/dev_sm_diagnostics.o  \
 	$(OUT)/dev_sm_config.o  \
 	$(OUT)/dev_sm_power.o  \
 	$(OUT)/dev_sm_system.o  \

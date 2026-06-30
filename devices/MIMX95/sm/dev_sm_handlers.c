@@ -40,6 +40,7 @@
 
 #include "dev_sm.h"
 #include "dev_sm_handlers.h"
+#include "dev_sm_diagnostics.h"
 #include "brd_sm.h"
 #include "mb_mu.h"
 #include "config_mb_mu.h"
@@ -76,7 +77,13 @@
 
 /* Local variables */
 
+/* Diagnostics needs external linkage to read msec timestamps; otherwise
+ * keep this strictly file-local. */
+#ifdef DEV_SM_DIAGNOSTICS
+uint64_t s_smTimeMsec = 0ULL;
+#else
 static uint64_t s_smTimeMsec = 0ULL;
+#endif
 
 static irq_prio_info_t s_irqPrioInfo[DEV_SM_NUM_IRQ_PRIO_IDX] =
 {
@@ -247,10 +254,11 @@ static void ExceptionHandler(IRQn_Type excId, const uint32_t *sp,
     uint32_t faultStatus, uint32_t faultAddr);
 static void FaultHandler(uint32_t faultId);
 static irq_prio_info_t *IrqPrioMap(IRQn_Type irq);
+#ifdef DEV_SM_DIAGNOSTICS
 static void IrqPrioBoost(irq_prio_info_t const * pInfo,uint32_t relPrio);
 static void IrqPrioUpdateRelative(irq_prio_info_t const *pInfo,
     uint32_t relPrio);
-static void IrqPrioUpdate(irq_prio_info_t *pInfo);
+#endif
 
 /*--------------------------------------------------------------------------*/
 /* NMI exception handler                                                    */
@@ -340,6 +348,37 @@ void SysTick_Handler(void)
     BRD_SM_TimerTick(BOARD_TICK_PERIOD_MSEC);
 
     s_smTimeMsec += BOARD_TICK_PERIOD_MSEC;
+
+#ifdef DEV_SM_DIAGNOSTICS
+    /* SM execution gap check: DWT CYCCNT delta since last SysTick.
+     * Empirically CYCCNT runs at ~400MHz (M33 core clock), tick=10ms
+     * => baseline ~4,000,000 cycles per tick.
+     * Threshold 4,400,000 cyc (~11ms) catches >=1ms SM-side stalls. */
+    {
+        uint32_t cyc = sm_cyccnt();
+        if (s_smLastSystickCyc != 0U)
+        {
+            uint32_t gap = cyc - s_smLastSystickCyc;
+            if (gap > s_smSystickGapMaxCyc)
+            {
+                s_smSystickGapMaxCyc = gap;
+            }
+            if (gap > 4400000U)
+            {
+                s_smSystickGapCount++;
+                sm_evt_log(SM_EVT_SM_GAP_EXCEEDED, 0U, 0U);
+            }
+        }
+        s_smLastSystickCyc = cyc;
+        sm_update_shm();
+    }
+
+    /* Log heartbeat every ~1s for liveness */
+    if (((uint32_t)s_smTimeMsec & 0x3FFU) == 0U)
+    {
+        sm_evt_log(SM_EVT_SYSTICK_1K, 0U, 0U);
+    }
+#endif
 }
 
 /*--------------------------------------------------------------------------*/
@@ -445,6 +484,11 @@ void Reserved110_IRQHandler(void)
 /*--------------------------------------------------------------------------*/
 void ELE_Group1_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
+    s_smEleIrqCount[0]++;
+    sm_evt_log(SM_EVT_ELE_GROUP1, 0U, 0U);
+#endif
+
     /* Call common handler */
     ExceptionHandler(ELE_Group1_IRQn, sp,
         BLK_CTRL_S_AONMIX->SENTINEL_RST_REQ_STAT,
@@ -456,6 +500,11 @@ void ELE_Group1_IRQHandler(const uint32_t *sp)
 /*--------------------------------------------------------------------------*/
 void ELE_Group2_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
+    s_smEleIrqCount[1]++;
+    sm_evt_log(SM_EVT_ELE_GROUP2, 0U, 0U);
+#endif
+
     /* Call common handler */
     ExceptionHandler(ELE_Group2_IRQn, sp,
         BLK_CTRL_S_AONMIX->SENTINEL_RST_REQ_STAT,
@@ -467,6 +516,11 @@ void ELE_Group2_IRQHandler(const uint32_t *sp)
 /*--------------------------------------------------------------------------*/
 void ELE_Group3_IRQHandler(const uint32_t *sp)
 {
+#ifdef DEV_SM_DIAGNOSTICS
+    s_smEleIrqCount[2]++;
+    sm_evt_log(SM_EVT_ELE_GROUP3, 0U, 0U);
+#endif
+
     /* Call common handler */
     ExceptionHandler(ELE_Group3_IRQn, sp,
         BLK_CTRL_S_AONMIX->SENTINEL_RST_REQ_STAT,
@@ -622,6 +676,11 @@ void MU6_B_IRQHandler(void)
 /*--------------------------------------------------------------------------*/
 void FCCU_INT0_IRQHandler(void)
 {
+#ifdef DEV_SM_DIAGNOSTICS
+    s_smFccuCount++;
+    sm_evt_log(SM_EVT_FCCU_ALARM, 0U, 0U);
+#endif
+
     VFCCU_ALARM_ISR();
 }
 
@@ -631,8 +690,14 @@ void FCCU_INT0_IRQHandler(void)
 void GPC_SM_REQ_IRQHandler(void)
 {
     pwr_lp_hs_mode lpHsMode;
+#ifdef DEV_SM_DIAGNOSTICS
+    uint32_t cyc0 = sm_cyccnt();
+#endif
 
     PWR_LpHandshakeModeGet(&lpHsMode);
+
+    sm_evt_log(SM_EVT_GPC_REQ_ENTRY, (uint8_t)lpHsMode.srcMixIdx,
+               (uint8_t)lpHsMode.stat);
 
     /* Check if powering up or deasserting reset */
     if (lpHsMode.stat == 1U)
@@ -649,6 +714,27 @@ void GPC_SM_REQ_IRQHandler(void)
         CPU_MixPowerDownNotify(lpHsMode.srcMixIdx);
         PWR_LpHandshakeAck();
     }
+
+#ifdef DEV_SM_DIAGNOSTICS
+    /* Log exit and update counters */
+    {
+        uint32_t cyc1 = sm_cyccnt();
+        uint32_t dur = cyc1 - cyc0;
+
+        sm_evt_log(SM_EVT_GPC_REQ_EXIT, (uint8_t)lpHsMode.srcMixIdx,
+                   (uint8_t)lpHsMode.stat);
+
+        s_smGpcReqCount++;
+        if (dur > s_smGpcMaxCyc)
+        {
+            s_smGpcMaxCyc = dur;
+        }
+
+        s_smLastGpcMix = lpHsMode.srcMixIdx;
+        s_smLastGpcMs = (uint32_t)s_smTimeMsec;
+        s_smLastGpcCyc = dur;
+    }
+#endif
 }
 
 /*--------------------------------------------------------------------------*/
@@ -899,6 +985,7 @@ static irq_prio_info_t *IrqPrioMap(IRQn_Type irq)
     return pInfo;
 }
 
+#ifdef DEV_SM_DIAGNOSTICS
 /*--------------------------------------------------------------------------*/
 /* Boost dynamic priority of IRQ                                            */
 /*--------------------------------------------------------------------------*/
@@ -975,7 +1062,7 @@ static void IrqPrioUpdateRelative(irq_prio_info_t const *pInfo,
 /*--------------------------------------------------------------------------*/
 /* Update dynamic priority of IRQ using priority info table index           */
 /*--------------------------------------------------------------------------*/
-static void IrqPrioUpdate(irq_prio_info_t *pInfo)
+void IrqPrioUpdate_Impl(irq_prio_info_t *pInfo)
 {
     if (pInfo != NULL)
     {
@@ -1010,4 +1097,5 @@ static void IrqPrioUpdate(irq_prio_info_t *pInfo)
         }
     }
 }
+#endif /* DEV_SM_DIAGNOSTICS */
 

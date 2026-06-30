@@ -42,12 +42,36 @@
 #include "rpc_scmi_internal.h"
 #include "lmm.h"
 
+#ifdef DEV_SM_DIAGNOSTICS
+/* SM instrumentation symbols defined non-static in
+ * devices/MIMX95/sm/dev_sm_diagnostics.c for the 0x30/0x31/0x32
+ * handlers.  Using symbols (not hardcoded BSS addresses) so the
+ * linker resolves them and the handlers stay correct across SM
+ * rebuilds even if BSS layout shifts. */
+typedef struct {
+    uint32_t ms;
+    uint32_t cyccnt;
+    uint8_t  evt;
+    uint8_t  mix_idx;
+    uint8_t  stat;
+    uint8_t  pad;
+} sm_evt_extern_t;
+extern volatile uint32_t s_smRingWriterSeq;
+extern volatile uint32_t s_smEventRingHead;
+extern volatile uint32_t s_smEvtCounts[8];
+extern volatile uint32_t s_smShmBlock[12];
+extern volatile sm_evt_extern_t s_smEventRing[128];
+#endif
+
 /* Local defines */
 
 /* Protocol version */
 #define PROTOCOL_VERSION  0x10000U
 
 /* SCMI misc protocol message IDs and masks */
+#define COMMAND_MISC_DIAG_DATA            0x30U
+#define COMMAND_MISC_DIAG_RING_HEAD       0x31U
+#define COMMAND_MISC_DIAG_RING_READ       0x32U
 #define COMMAND_PROTOCOL_VERSION             0x0U
 #define COMMAND_PROTOCOL_ATTRIBUTES          0x1U
 #define COMMAND_PROTOCOL_MESSAGE_ATTRIBUTES  0x2U
@@ -66,7 +90,11 @@
 #define COMMAND_NEGOTIATE_PROTOCOL_VERSION   0x10U
 #define COMMAND_MISC_CONTROL_EXT_SET         0x20U
 #define COMMAND_MISC_CONTROL_EXT_GET         0x21U
+#ifdef DEV_SM_DIAGNOSTICS
+#define COMMAND_SUPPORTED_MASK               0x300017FFFULL | (1ULL << COMMAND_MISC_DIAG_DATA) | (1ULL << COMMAND_MISC_DIAG_RING_HEAD) | (1ULL << COMMAND_MISC_DIAG_RING_READ)
+#else
 #define COMMAND_SUPPORTED_MASK               0x300017FFFULL
+#endif
 
 /* SCMI max misc argument lengths */
 #define MISC_MAX_BUILDDATE  16U
@@ -367,6 +395,72 @@ typedef struct
     uint32_t syslog[MISC_MAX_SYSLOG];
 } msg_tmisc13_t;
 
+/* Response type for MiscDiagData() */
+typedef struct
+{
+    /* Header word */
+    uint32_t header;
+    /* Return status */
+    int32_t status;
+    /* Number of data words returned */
+    uint32_t numWords;
+    /* Diagnostic data: [0]=magic, [1]=ver, [2]=ms,
+     *   [3]=gap_max_cyc, [4]=gap_count, [5]=gpc_req,
+     *   [6]=gpc_max_cyc, [7]=evt_ring_head,
+     *   [8]=ele_irq0, [9]=ele_irq1, [10]=ele_irq2,
+     *   [11]=update_cnt */
+    uint32_t data[12];
+} msg_tmisc_diag_t;
+
+/* Response type for MiscDiagRingHead() - 0x31 */
+typedef struct
+{
+    uint32_t header;
+    int32_t  status;
+    uint32_t magic;        /* 0x534D4732 "SMG2" */
+    uint32_t schemaVer;
+    uint32_t ringHead;
+    uint32_t ringSize;
+    uint32_t entrySize;
+    uint32_t writerSeq;
+    uint32_t timeMsLo;
+    uint32_t timeMsHi;
+    uint32_t cyccntNow;
+    uint32_t evtCounts[8];
+} msg_tmisc_diag_ring_head_t;
+
+/* Single event-ring entry (matches sm_evt_t in dev_sm_handlers.c) */
+typedef struct
+{
+    uint32_t ms;
+    uint32_t cyccnt;
+    uint8_t  evt;
+    uint8_t  mix_idx;
+    uint8_t  stat;
+    uint8_t  pad;
+} scmi_sm_evt_t;
+
+/* Request type for MiscDiagRingRead() - 0x32 */
+typedef struct
+{
+    uint32_t header;
+    uint32_t startIdx;
+    uint32_t count;
+} msg_rmisc_diag_ring_read_t;
+
+/* Response type for MiscDiagRingRead() - 0x32 */
+typedef struct
+{
+    uint32_t header;
+    int32_t  status;
+    uint32_t startIdx;
+    uint32_t returnedCount;
+    uint32_t ringHeadAfter;
+    uint32_t writerSeqStart;
+    uint32_t writerSeqEnd;
+    scmi_sm_evt_t entries[6];
+} msg_tmisc_diag_ring_read_t;
+
 /* Response type for MiscBoardInfo() */
 typedef struct
 {
@@ -483,6 +577,15 @@ static int32_t MiscControlExtGet(const scmi_caller_t *caller,
     const msg_rmisc33_t *in, msg_tmisc33_t *out, uint32_t *len);
 static int32_t MiscControlEvent(scmi_msg_id_t msgId,
     const lmm_rpc_trigger_t *trigger);
+#ifdef DEV_SM_DIAGNOSTICS
+static int32_t MiscDiagData(const scmi_caller_t *caller,
+    const scmi_msg_header_t *in, msg_tmisc_diag_t *out);
+static int32_t MiscDiagRingHead(const scmi_caller_t *caller,
+    const scmi_msg_header_t *in, msg_tmisc_diag_ring_head_t *out);
+static int32_t MiscDiagRingRead(const scmi_caller_t *caller,
+    const msg_rmisc_diag_ring_read_t *in,
+    msg_tmisc_diag_ring_read_t *out);
+#endif
 static int32_t MiscResetAgentConfig(uint32_t lmId, uint32_t agentId,
     bool permissionsReset);
 
@@ -584,6 +687,26 @@ int32_t RPC_SCMI_MiscDispatchCommand(scmi_caller_t *caller,
             status = MiscNegotiateProtocolVersion(caller,
                 (const msg_rmisc16_t*) in, (const scmi_msg_status_t*) out);
             break;
+#ifdef DEV_SM_DIAGNOSTICS
+        case COMMAND_MISC_DIAG_DATA:
+            lenOut = sizeof(msg_tmisc_diag_t);
+            status = MiscDiagData(caller,
+                (const scmi_msg_header_t*) in,
+                (msg_tmisc_diag_t*) out);
+            break;
+        case COMMAND_MISC_DIAG_RING_HEAD:
+            lenOut = sizeof(msg_tmisc_diag_ring_head_t);
+            status = MiscDiagRingHead(caller,
+                (const scmi_msg_header_t*) in,
+                (msg_tmisc_diag_ring_head_t*) out);
+            break;
+        case COMMAND_MISC_DIAG_RING_READ:
+            lenOut = sizeof(msg_tmisc_diag_ring_read_t);
+            status = MiscDiagRingRead(caller,
+                (const msg_rmisc_diag_ring_read_t*) in,
+                (msg_tmisc_diag_ring_read_t*) out);
+            break;
+#endif
         case COMMAND_MISC_CONTROL_EXT_SET:
             lenOut = sizeof(const scmi_msg_status_t);
             status = MiscControlExtSet(caller, (const msg_rmisc32_t*) in,
@@ -1630,6 +1753,106 @@ static int32_t MiscSyslog(const scmi_caller_t *caller,
 /*   bytes in length                                                        */
 /*                                                                          */
 /* Process the MISC_BOARD_INFO message. Platform handler for                */
+#ifdef DEV_SM_DIAGNOSTICS
+/* SCMI_MiscDiagData() - 0x30.
+ * Returns SM instrumentation diagnostic block (12 x uint32_t)
+ * from the shared BSS region at 0x2002A878. */
+static int32_t MiscDiagData(const scmi_caller_t *caller,
+    const scmi_msg_header_t *in, msg_tmisc_diag_t *out)
+{
+    int32_t status = SM_ERR_SUCCESS;
+    if (caller->lenCopy < sizeof(*in))
+    {
+        status = SM_ERR_PROTOCOL_ERROR;
+    }
+    if (status == SM_ERR_SUCCESS)
+    {
+        for (uint32_t i = 0U; i < 12U; i++)
+        {
+            out->data[i] = s_smShmBlock[i];
+        }
+        out->numWords = 12U;
+    }
+    return status;
+}
+
+/* SCMI_MiscDiagRingHead() - 0x31.
+ * Returns event-ring metadata and per-class counters so the A55
+ * reader can decide how many entries to drain via 0x32. */
+static int32_t MiscDiagRingHead(const scmi_caller_t *caller,
+    const scmi_msg_header_t *in, msg_tmisc_diag_ring_head_t *out)
+{
+    int32_t status = SM_ERR_SUCCESS;
+    if (caller->lenCopy < sizeof(*in))
+    {
+        status = SM_ERR_PROTOCOL_ERROR;
+    }
+    if (status == SM_ERR_SUCCESS)
+    {
+        out->magic     = 0x534D4732U;
+        out->schemaVer = 1U;
+        out->ringHead  = s_smShmBlock[7];
+        out->ringSize  = 128U;
+        out->entrySize = 12U;
+        out->writerSeq = s_smRingWriterSeq;
+        out->timeMsLo  = s_smShmBlock[2];
+        out->timeMsHi  = 0U;
+        out->cyccntNow = *((volatile const uint32_t *)0xE0001004U);
+        for (uint32_t i = 0U; i < 8U; i++)
+        {
+            out->evtCounts[i] = s_smEvtCounts[i];
+        }
+    }
+    return status;
+}
+
+/* SCMI_MiscDiagRingRead() - 0x32.
+ * Paged read of the SM event ring.  Up to 6 entries per call with
+ * seqlock generation bracketing so the reader can detect torn reads. */
+static int32_t MiscDiagRingRead(const scmi_caller_t *caller,
+    const msg_rmisc_diag_ring_read_t *in,
+    msg_tmisc_diag_ring_read_t *out)
+{
+    int32_t status = SM_ERR_SUCCESS;
+    if (caller->lenCopy < sizeof(*in))
+    {
+        status = SM_ERR_PROTOCOL_ERROR;
+    }
+    if ((status == SM_ERR_SUCCESS) && (in->count > 6U))
+    {
+        status = SM_ERR_INVALID_PARAMETERS;
+    }
+    if (status == SM_ERR_SUCCESS)
+    {
+        uint32_t head = s_smEventRingHead;
+        if ((in->startIdx > head) ||
+            ((head - in->startIdx) > 128U))
+        {
+            status = SM_ERR_INVALID_PARAMETERS;
+        }
+        if (status == SM_ERR_SUCCESS)
+        {
+            out->startIdx       = in->startIdx;
+            out->returnedCount  = in->count;
+            out->writerSeqStart = s_smRingWriterSeq;
+            for (uint32_t i = 0U; i < in->count; i++)
+            {
+                uint32_t idx = (in->startIdx + i) & 0x7FU;
+                out->entries[i].ms      = s_smEventRing[idx].ms;
+                out->entries[i].cyccnt  = s_smEventRing[idx].cyccnt;
+                out->entries[i].evt     = s_smEventRing[idx].evt;
+                out->entries[i].mix_idx = s_smEventRing[idx].mix_idx;
+                out->entries[i].stat    = s_smEventRing[idx].stat;
+                out->entries[i].pad     = s_smEventRing[idx].pad;
+            }
+            out->ringHeadAfter = s_smEventRingHead;
+            out->writerSeqEnd  = s_smRingWriterSeq;
+        }
+    }
+    return status;
+}
+#endif /* DEV_SM_DIAGNOSTICS */
+
 /* SCMI_MiscBoardInfo().                                                    */
 /*                                                                          */
 /* Return errors:                                                           */
