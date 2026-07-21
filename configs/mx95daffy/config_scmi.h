@@ -651,6 +651,8 @@
         .clkPerms[DEV_SM_CLK_A55PERIPH] = SM_SCMI_PERM_EXCLUSIVE, \
         .clkPerms[DEV_SM_CLK_A55P_GPR_SEL] = SM_SCMI_PERM_EXCLUSIVE, \
         .clkPerms[DEV_SM_CLK_A55] = SM_SCMI_PERM_EXCLUSIVE, \
+        .clkPerms[DEV_SM_CLK_SAI1] = SM_SCMI_PERM_ALL, \
+        .clkPerms[DEV_SM_CLK_SAI2] = SM_SCMI_PERM_ALL, \
         .cpuPerms[DEV_SM_CPU_A55C1] = SM_SCMI_PERM_EXCLUSIVE, \
         .cpuPerms[DEV_SM_CPU_A55C2] = SM_SCMI_PERM_EXCLUSIVE, \
         .cpuPerms[DEV_SM_CPU_A55C3] = SM_SCMI_PERM_EXCLUSIVE, \
